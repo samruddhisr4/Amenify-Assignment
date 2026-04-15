@@ -1,105 +1,41 @@
-# Amenify Summer 2026 – Software Engineering Internship Assignment
-
-## Section 3: Reasoning & Design
+# Design & Architecture Questions — Amenify AI Support Bot
 
 ---
 
-### 1. How did you ingest and structure the data from the website?
+## 1. How did you ingest and structure the data from the website?
 
-I used a two-phase approach:
+I manually curated content from several pages on amenify.com — the homepage, about page, service pages, provider page, and a few others. I chose to do this by hand rather than scraping automatically because scrapers tend to pull in a lot of junk: nav menus, cookie banners, repeated footers. For a support bot, the quality of what goes into the knowledge base matters more than the quantity.
 
-**Phase 1 — Scraping**  
-Fetched content from key Amenify pages: the homepage, About Us, and all major service pages (cleaning, handyman, chores, dog walking, food/grocery, move-out cleaning, etc.) using Python's `requests` + `BeautifulSoup`. Navigation links, footers, and HTML boilerplate were stripped, keeping only meaningful text.
-
-**Phase 2 — Chunking & Structuring**  
-The raw page text was split into semantically coherent chunks (each focused on one topic: a service, an FAQ, a company fact). Each chunk was stored as a JSON object with three fields:
-```json
-{
-  "source": "https://amenify.com",
-  "section": "FAQ - Background Checks",
-  "content": "..."
-}
-```
-This structure lets the retrieval system surface which source a chunk came from, making attribution transparent and supporting anti-hallucination strategies.
-
-**Embedding & Indexing**  
-Each chunk was embedded with OpenAI's `text-embedding-3-small` model (1536-dimensional vectors). The vectors were loaded into a **FAISS IndexFlatIP** (Inner Product index) after L2-normalisation, which makes inner-product equivalent to cosine similarity. This gives O(1) approximate nearest-neighbor lookup at query time.
+The data lives in a JSON file where each entry has three fields: a `source` URL (so the bot can cite where it got its answer), a `section` label like "FAQ - Background Checks", and the actual `content`. Each chunk maps to one coherent topic rather than being split at some arbitrary character count. That way, when a chunk is retrieved, it actually contains a complete, useful answer. At startup, each chunk is embedded using OpenAI's `text-embedding-3-small` model and stored in memory as a NumPy matrix for fast similarity lookups.
 
 ---
 
-### 2. How did you reduce hallucinations?
+## 2. How did you reduce hallucinations?
 
-Three complementary safeguards:
+Honestly, I attacked this from a few different angles. The most important one is the system prompt — the model is told upfront to only answer using the context it's given and to say "I don't know." if the answer isn't there. No room for improvisation.
 
-| Layer | Technique |
-|-------|-----------|
-| **Retrieval threshold** | Only chunks with cosine similarity ≥ 0.40 are included in the prompt. If no chunk meets this bar the model is told "no relevant information found" and defaults to "I don't know." |
-| **Strict system prompt** | The system message explicitly instructs the model: *"Answer ONLY using the context provided. If the answer cannot be found in the context, respond EXACTLY with: I don't know."* |
-| **Temperature = 0** | Setting `temperature=0` makes GPT-4o-mini deterministic and eliminates creative/speculative generation. |
-
-Additionally, the context is injected fresh on every request (including relevant retrieved chunks only), so the model cannot drift into confabulation based on prior conversational momentum.
+On top of that, there's a similarity threshold: only knowledge base chunks with a cosine similarity score above 0.40 actually get sent to the model. If nothing clears that bar, the model explicitly sees "no relevant information found" in its context, which makes the "I don't know" response far more reliable. I also set temperature to zero, so the model isn't being creative — it sticks to the most probable, grounded answer. And since the knowledge base was hand-written from real site content, there's no bad source material feeding the retriever in the first place.
 
 ---
 
-### 3. What are the limitations of your approach?
+## 3. What are the limitations of your approach?
 
-| Limitation | Details |
-|------------|---------|
-| **Static knowledge base** | The scraped data is a snapshot. If Amenify updates their website (new services, pricing, FAQs), the bot remains unaware until the knowledge base is rebuilt. |
-| **No real-time data** | Booking availability, live pricing, or user-account information cannot be sourced from a static JSON file. |
-| **Chunk granularity** | Very long pages where multiple topics are mixed may cause imperfect chunk boundaries, leading to slightly irrelevant retrievals. |
-| **Language support** | Currently English-only; multi-language support would require multilingual embeddings. |
-| **Session memory limit** | Sessions are stored in-memory on the server; a restart loses all history. Under concurrent load, memory usage grows linearly. |
-| **FAISS is in-memory only** | On server restart the index is rebuilt (adds ~5–10 s startup time). For large corpora this is not practical. |
+The biggest one is that the knowledge base is static. The moment Amenify updates their website, the bot is out of date, and someone has to manually fix the JSON and restart the server. There's no auto-sync.
+
+Beyond that, 26 chunks is pretty thin coverage. It handles the common questions well, but anything specific — like pricing for a particular community or detailed escalation steps — just isn't there. The session store is also in-memory, so a server restart wipes all conversation history. And the brute-force similarity search works fine now, but would slow down significantly if the corpus ever grew to thousands of documents. The 0.40 threshold is also just a rough heuristic — I'd want a proper test set to validate whether it's actually the right cutoff.
 
 ---
 
-### 4. How would you scale this system?
+## 4. How would you scale this system?
 
-**Horizontal scaling:**
-- Replace in-memory FAISS with a managed vector database (e.g., **Pinecone**, **Weaviate**, or **pgvector** on PostgreSQL) that is persistent and shareable across instances.
-- Deploy the FastAPI app on **Kubernetes** (GKE / EKS) behind a load balancer so multiple replicas handle concurrent users.
+The first thing I'd change is to stop relying on a hand-maintained JSON file and build a proper ingestion pipeline — something that watches amenify.com for changes, re-embeds only what changed, and updates the knowledge base automatically. For the retrieval side, I'd swap the NumPy matrix for a real vector database like Pinecone or Qdrant, which handles millions of vectors efficiently and supports filtering by metadata like community ID or service type.
 
-**Session persistence:**
-- Move `sessions{}` to **Redis** with TTL so horizontal scaling doesn't lose session history.
-
-**Knowledge base freshness:**
-- Set up a scheduled scraping job (e.g., **Cloud Scheduler** → Cloud Run) that re-scrapes Amenify pages nightly, diffs against the current knowledge base, and upserts only changed chunks.
-
-**Observability:**
-- Add **LangSmith** or **Langfuse** for LLM call tracing and latency monitoring.
-- Track retrieval quality metrics (NDCG, precision@k) and set up alerts when "I don't know" rate spikes (a proxy for coverage gaps).
-
-**Cost optimisation:**
-- Cache embeddings for repeated queries using Redis.
-- Use a cheaper model (GPT-4o-mini ✅ already chosen) for most responses; fall back to GPT-4o only for high-confidence complex queries.
+Sessions would move to Redis so they survive restarts and can be shared across multiple server instances. The API itself would be containerized and deployed behind a load balancer, with replicas scaling up based on traffic. Since the embedding call on each user query is the main latency cost, caching embeddings for common or repeated queries would also help a lot.
 
 ---
 
-### 5. What improvements would you make for production use?
+## 5. What improvements would you make for production use?
 
-| Category | Improvement |
-|----------|-------------|
-| **Retrieval quality** | Switch to a **hybrid search** (BM25 keyword + dense vector) using Weaviate or Elasticsearch to catch keyword-matched queries that embeddings can miss (e.g., exact product names). |
-| **Re-ranking** | Add a cross-encoder re-ranker (e.g., Cohere Rerank or a fine-tuned BERT) between retrieval and generation to improve top-k precision. |
-| **Streaming responses** | Stream the GPT response token-by-token via Server-Sent Events so the UI feels snappier. |
-| **Auth & rate limiting** | Add API key auth and per-IP rate limiting (e.g., via FastAPI middleware + Redis) to prevent abuse. |
-| **Feedback loop** | Add 👍/👎 buttons in the UI. Negative feedback is logged and routed to a human review queue, improving knowledge base gaps over time. |
-| **Persistent sessions** | Use Redis + structured turn storage, enabling multi-day conversation memory and analytics on common questions. |
-| **Multi-modal** | If Amenify adds booking screenshots or onboarding videos, extend to handle image context (GPT-4o vision). |
-| **Automated testing** | Build a golden-set Q&A eval suite that runs on every knowledge-base update, using metrics like faithfulness and answer relevance (via `ragas`). |
+The most impactful change would be the live ingestion pipeline — keeping the knowledge base in sync with the actual website is what makes the bot trustworthy long-term. I'd also want a real evaluation framework: a set of test questions with known answers, so any change to the prompt, threshold, or chunking strategy can be validated before it ships.
 
----
-
-## Deliverables Checklist
-
-- [x] Source code (backend + frontend)
-- [x] README with setup instructions
-- [x] This document with Section 3 answers filled in
-- [x] Example queries and outputs (see README)
-
----
-
-*Submitted by: [Your Name]*  
-*LinkedIn: [Your LinkedIn URL]*  
-*Email: [Your Email]*
+A feedback mechanism would be valuable too — letting residents give a thumbs up or down after each response, and having a human review the failures. That data would quickly reveal the patterns the bot is getting wrong. For a platform like Amenify with thousands of communities, I'd also add multi-tenant support so the retrieval layer can be filtered to show only content relevant to a specific property. And finally, when the bot genuinely can't answer, it shouldn't just leave the user hanging — there should be a clear path to a human agent or a support ticket.

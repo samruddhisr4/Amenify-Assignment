@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Amenify AI Support | Chat</title>
+  <meta name="description" content="Get instant answers about Amenify's home services, cleaning, handyman, dog walking, food delivery and more — powered by AI." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <!-- ─── Background Blobs ──────────────────────────────────────── -->
+  <div class="bg-blob blob-1"></div>
+  <div class="bg-blob blob-2"></div>
+  <div class="bg-blob blob-3"></div>
+
+  <!-- ─── Main Layout ───────────────────────────────────────────── -->
+  <div class="layout">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon">A</div>
+        <span class="logo-text">Amenify</span>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button id="btn-new-chat" class="nav-btn active" title="New Chat">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          <span>New Chat</span>
+        </button>
+        <button id="btn-clear" class="nav-btn" title="Clear History">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          <span>Clear</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-suggested">
+        <p class="suggested-label">Try asking</p>
+        <button class="suggestion-chip" data-q="What services does Amenify offer?">🏠 What services do you offer?</button>
+        <button class="suggestion-chip" data-q="Are your cleaners background-checked?">🔍 Are cleaners background-checked?</button>
+        <button class="suggestion-chip" data-q="Do you offer dog walking?">🐕 Do you offer dog walking?</button>
+        <button class="suggestion-chip" data-q="How do I sign up and get $50?">💰 How do I get $50 sign-up bonus?</button>
+        <button class="suggestion-chip" data-q="Does Amenify offer move-out cleaning?">📦 Move-out cleaning services?</button>
+        <button class="suggestion-chip" data-q="Who are the founders of Amenify?">👥 Who founded Amenify?</button>
+      </div>
+
+      <div class="sidebar-footer">
+        <span>Powered by OpenAI &amp; RAG</span>
+      </div>
+    </aside>
+
+    <!-- Chat Panel -->
+    <main class="chat-panel">
+
+      <!-- Header -->
+      <header class="chat-header">
+        <div class="chat-header-info">
+          <div class="avatar-ring">
+            <div class="avatar-dot"></div>
+          </div>
+          <div>
+            <h1 class="chat-title">Amenify Support</h1>
+            <p class="chat-subtitle">AI assistant · Always online</p>
+          </div>
+        </div>
+        <div class="header-badge">
+          <span class="badge-dot"></span>
+          <span>Live</span>
+        </div>
+      </header>
+
+      <!-- Messages area -->
+      <section id="messages" class="messages" aria-live="polite" aria-label="Chat messages">
+        <!-- Welcome card -->
+        <div class="welcome-card" id="welcome-card">
+          <div class="welcome-icon">🏡</div>
+          <h2>Hi! I'm Amenify's AI assistant.</h2>
+          <p>Ask me anything about our home services — cleaning, handyman, dog walking, grocery delivery, and more.</p>
+          <p class="welcome-hint">← Use the sidebar suggestions or type below to get started!</p>
+        </div>
+      </section>
+
+      <!-- Typing indicator (hidden by default) -->
+      <div id="typing-indicator" class="typing-indicator hidden">
+        <div class="typing-bubble">
+          <span></span><span></span><span></span>
+        </div>
+        <span class="typing-text">Amenify AI is thinking…</span>
+      </div>
+
+      <!-- Input bar -->
+      <footer class="input-bar">
+        <div class="input-wrapper">
+          <textarea
+            id="user-input"
+            placeholder="Ask about cleaning, handyman, dog walking…"
+            rows="1"
+            maxlength="500"
+            aria-label="Chat message input"
+          ></textarea>
+          <button id="send-btn" class="send-btn" aria-label="Send message" disabled>
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+          </button>
+        </div>
+        <p class="input-hint">Answers are based on Amenify's knowledge base only.</p>
+      </footer>
+
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
